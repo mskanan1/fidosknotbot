@@ -2,6 +2,7 @@ services:
   - type: web
     name: telegram-bot
     env: python
+    pythonVersion: "3.12"
     buildCommand: pip install -r requirements.txt
     startCommand: python railway_bot_config.py
     envVars:
