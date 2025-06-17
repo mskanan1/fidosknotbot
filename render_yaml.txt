@@ -5,11 +5,13 @@ services:
     pythonVersion: "3.12"
     buildCommand: pip install -r requirements.txt
     startCommand: python railway_bot_config.py
+    scaling:
+      minInstances: 1
+      maxInstances: 1  # Ensure only one instance runs
     envVars:
       - key: BOT_TOKEN
-        value: "8107478463:AAGwGVwkchmKINM_rCRiQJaAr3pzKhU-_bM"
+        value: "7837182225:AAGWPDP5Bco3h-0WLrwrV8UXuI8eVgjF3qg"
       - key: SOURCE_GROUP_ID
         value: "-4926087910"
       - key: ARCHIVE_GROUP_ID
         value: "-2657848581"
-
