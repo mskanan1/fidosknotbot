@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: telegram-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python railway_bot_config.py
+    envVars:
+      - key: BOT_TOKEN
+        value: "7837182225:AAGWPDP5Bco3h-0WLrwrV8UXuI8eVgjF3qg"
+      - key: SOURCE_GROUP_ID
+        value: "-4926087910"
+      - key: ARCHIVE_GROUP_ID
+        value: "-2657848581"
