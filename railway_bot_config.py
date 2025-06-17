@@ -1,5 +1,13 @@
+#!/usr/bin/env python3
+"""
+Telegram Bot Configuration for Railway/Render Deployment
+Fixed for Python 3.13 compatibility and multiple instance conflicts
+"""
+
 import logging
 import os
+import signal
+import sys
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ChatMember
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ChatMemberHandler
 import asyncio
@@ -21,14 +29,20 @@ ARCHIVE_GROUP_ID = int(os.getenv('ARCHIVE_GROUP_ID', '-2657848581'))
 
 # Validate configuration
 if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN is required")
+    logger.error("BOT_TOKEN is required")
+    sys.exit(1)
 if SOURCE_GROUP_ID == 0:
-    raise ValueError("SOURCE_GROUP_ID is required")
+    logger.error("SOURCE_GROUP_ID is required")
+    sys.exit(1)
 if ARCHIVE_GROUP_ID == 0:
-    raise ValueError("ARCHIVE_GROUP_ID is required")
+    logger.error("ARCHIVE_GROUP_ID is required")
+    sys.exit(1)
 
 # Get port from environment (Railway provides this)
 PORT = int(os.getenv('PORT', '8080'))
+
+# Global application instance for cleanup
+application = None
 
 # Store pending verifications {user_id: {chat_id: chat_id, message_id: message_id}}
 pending_verifications = {}
@@ -73,6 +87,17 @@ like a deranged, disfigured family!
 Now, get your brother to stop sucking the dog's dick and get that knot in your ass like I taught you! 
 
 —Slammy"""
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully"""
+    logger.info(f"Received signal {signum}. Shutting down gracefully...")
+    if application:
+        logger.info("Stopping application...")
+        try:
+            asyncio.create_task(application.stop())
+        except:
+            pass
+    sys.exit(0)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
@@ -408,43 +433,57 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 def main() -> None:
     """Start the bot."""
-    logger.info(f"Starting bot with:")
+    global application
+    
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    logger.info("Starting bot with:")
     logger.info(f"Source Group ID: {SOURCE_GROUP_ID}")
     logger.info(f"Archive Group ID: {ARCHIVE_GROUP_ID}")
     logger.info(f"Port: {PORT}")
     
-    # Create the Application
-    application = Application.builder().token(BOT_TOKEN).build()
+    try:
+        # Create the Application
+        application = Application.builder().token(BOT_TOKEN).build()
 
-    # Add handlers for new members and quiz answers
-    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_member))
-    application.add_handler(CallbackQueryHandler(handle_quiz_answer, pattern=r"^quiz_\d+_\d+$"))
-    
-    # Add command handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("echo", echo_command))
-    application.add_handler(CommandHandler("info", info_command))
-    application.add_handler(CommandHandler("getid", get_chat_id))
+        # Add handlers for new members and quiz answers
+        application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_member))
+        application.add_handler(CallbackQueryHandler(handle_quiz_answer, pattern=r"^quiz_\d+_\d+$"))
+        
+        # Add command handlers
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("echo", echo_command))
+        application.add_handler(CommandHandler("info", info_command))
+        application.add_handler(CommandHandler("getid", get_chat_id))
 
-    # Add message handlers for all media types
-    application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    application.add_handler(MessageHandler(filters.VIDEO, handle_video))
-    application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    application.add_handler(MessageHandler(filters.AUDIO, handle_audio))
-    application.add_handler(MessageHandler(filters.VOICE, handle_voice))
-    application.add_handler(MessageHandler(filters.VIDEO_NOTE, handle_video_note))
-    application.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
-    
-    # Text messages (non-command)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo_message))
+        # Add message handlers for all media types
+        application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+        application.add_handler(MessageHandler(filters.VIDEO, handle_video))
+        application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+        application.add_handler(MessageHandler(filters.AUDIO, handle_audio))
+        application.add_handler(MessageHandler(filters.VOICE, handle_voice))
+        application.add_handler(MessageHandler(filters.VIDEO_NOTE, handle_video_note))
+        application.add_handler(MessageHandler(filters.Sticker.ALL, handle_sticker))
+        
+        # Text messages (non-command)
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo_message))
 
-    # Add error handler
-    application.add_error_handler(error_handler)
+        # Add error handler
+        application.add_error_handler(error_handler)
 
-    # Run the bot until the user presses Ctrl-C
-    logger.info("Bot is starting...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+        # Run the bot with improved error handling
+        logger.info("Bot is starting...")
+        application.run_polling(
+            allowed_updates=["message", "chat_member", "callback_query"],
+            drop_pending_updates=True  # This helps avoid conflicts with multiple instances
+        )
+        
+    except Exception as e:
+        logger.error(f"Error starting bot: {e}")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
